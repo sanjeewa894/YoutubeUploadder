@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>clientInfo.json</file>
+        <file>apikey</file>
+    </qresource>
+</RCC>
