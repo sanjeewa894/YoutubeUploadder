@@ -9,7 +9,7 @@
 #include <QOAuth2AuthorizationCodeFlow>
 #include <QUrl>
 #include <QTableView>
-
+#include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -41,6 +41,9 @@ MainWindow::MainWindow(QWidget *parent)
     midnight = {5, 0, 0};// Set the time to 00:00:00
     ui->uploadCount->setText(QString::number(uploadIndex));
 
+    QDateTime datet = QDateTime::currentDateTime();
+    datet = datet.addDays(1);
+    ui->dateTimeEdit->setDateTime(datet);
 }
 
 MainWindow::~MainWindow()
@@ -57,7 +60,7 @@ void MainWindow::apiReply(int pos, QNetworkReply *reply){
         case 1:
             //playlist creation
             upload_error = reply->error();
-            qInfo()<<upload_error;
+            qInfo()<<"api reply 1"<<upload_error;
             //call upload
             if(upload_error == QNetworkReply::NetworkError::NoError){
                 setPlainText("Uploading Next Video");
@@ -155,9 +158,11 @@ void MainWindow::oauthSignIn() {
         QOAuth2AuthorizationCodeFlow* auth = youtube.InitOAuth(client,access_token);
         auth->grant();
     }else{
-        msgBox.setText("Already connected!");
+        msgBox.setText("Disconnected!");
         msgBox.exec();
-        setPlainText("Already authenticated");
+        setPlainText("Disconnected...");
+
+        ui->auther->setText("Authenticate");
     }
     qInfo()<<access_token;
 }
@@ -242,7 +247,7 @@ void MainWindow::on_loadFiles_released()
     ui->tableView->setColumnWidth(2,this->width()/4);
     ui->tableView->setColumnWidth(3,this->width()/4);
     setPlainText("Files loaded");
-
+    uploadIndex =0;
 }
 
 
@@ -307,7 +312,6 @@ void MainWindow::on_uploadFiles_released()
     }
 
 
-
     bool createNewPlaylist = ui->checkBox->isChecked();
     //qDebug()<<fileList<<titles<<tags<<description;
     if(createNewPlaylist){
@@ -325,6 +329,7 @@ void MainWindow::on_uploadFiles_released()
 
 
 void MainWindow::nextVideoUpload(){
+    qDebug()<<"upload "<<uploadIndex;
     if(uploadIndex >= fileList.size()){
         setPlainText("No files to upload");
         msgBox.setText("No file to upload!");
@@ -333,6 +338,11 @@ void MainWindow::nextVideoUpload(){
     }
     ui->statusbar->showMessage("Uploading video file "+ fileList.at(uploadIndex));
     setPlainText("Uploading video file " + fileList.at(uploadIndex));
+
+    midnight = ui->dateTimeEdit->time();
+    midnight = midnight.addSecs(18000); //add 5 hours
+    date = ui->dateTimeEdit->date();
+    qInfo() << "date time"<< date << midnight;
     // Combine the date and time
     QTime addTime = midnight.addSecs(300*uploadIndex);
     QDateTime dateTime(date,addTime);
