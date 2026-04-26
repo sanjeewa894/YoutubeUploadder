@@ -190,7 +190,7 @@ void MainWindow::on_loadFiles_released()
     //check files are available
     QDir dirObj(fileDirectory);
     fileList = dirObj.entryList(QStringList() << "*.mp4" , QDir::Files);
-    qInfo() << fileList.size();
+
     setPlainText("Number of video files found: " + QString::number(fileList.size()));
 
     model->clear();
@@ -202,10 +202,23 @@ void MainWindow::on_loadFiles_released()
     foreach(auto &item, fileList){
         QStandardItem *item1,*item2,*item3,*item4;
         item1 = new QStandardItem(item);
-        item2 = new QStandardItem((item.split(".")[1]));
+
+        if((item.split(".")[1]).contains("mp4"))
+           item2 = new QStandardItem((item.split(".")[0]));
+        else
+          item2 = new QStandardItem((item.split(".")[1]));
+
+
         //set tags
         QString tags="";
         QStringList tmp = ((item.split(".")[1]).split("with")[0]).split("~");
+        if(tmp.size()<=1)
+          tmp = ((item.split(".")[1]).split("with")[0]).split("-");
+
+        if(tmp.size()<=1)
+          tmp = ((item.split(".")[0]).split("with")[0]).split("-");
+
+
         if(tmp.size()>1){
             QStringList sName = tmp[0].split(" ");
             QStringList aName = tmp[1].split(" ");

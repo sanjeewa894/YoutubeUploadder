@@ -250,11 +250,12 @@ void YouTube::createPlaylist(const QString &title){
     }
 
     QNetworkAccessManager* downloader = new QNetworkAccessManager(this);
-    connect(downloader, &QNetworkAccessManager::finished, [&](QNetworkReply* reply){
+    connect(downloader, &QNetworkAccessManager::finished, this, [&](QNetworkReply* reply){
         //set the playlist id;
 
 
         if(reply->error() == QNetworkReply::NoError){
+            QByteArray body;
             body = reply->readAll();
             QJsonObject object = QJsonDocument::fromJson(body).object();
             playListID = object["id"].toString();
