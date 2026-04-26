@@ -43,7 +43,7 @@ private:
     bool authenticated = false;
     int uploadIndex=0;
     QString access_token;
-    YouTube youtube;
+    std::unique_ptr<YouTube> youtube = nullptr;
     QString thumbnail;
     QMessageBox msgBox;
     void oauthSignIn();
@@ -65,5 +65,6 @@ private:
     void setPlainText(const QString &msg);
 
     QString m_access_token;
+    void initYoutubeConnection();
 };
 #endif // MAINWINDOW_H

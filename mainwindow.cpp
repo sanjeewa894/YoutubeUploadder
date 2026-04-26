@@ -17,16 +17,6 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
-    connect(&youtube, &YouTube::networkReply,this, &MainWindow::apiReply);
-    connect(&youtube, &YouTube::authenticatioReply,this, &MainWindow::authenticReply);
-    connect(&youtube, &YouTube::uploadStatus,this, &MainWindow::uploadingStatus);
-    connect(&youtube, &YouTube::uploadProgress,[&](uint8_t progress){
-        ui->progressBar->setValue(progress);
-    });
-    connect(&youtube, &YouTube::showStatusText,[&](const QString &msg){
-       setPlainText(msg);
-    });
-
     model = new QStandardItemModel(0, 4,this);
     horizontalHeader.append("File Name");
     horizontalHeader.append("Video Title");
@@ -57,49 +47,50 @@ void MainWindow::apiReply(int pos, QNetworkReply *reply){
     QJsonObject object;
 
     switch(pos){
-        case 1:
-            //playlist creation
-            upload_error = reply->error();
-            qInfo()<<"api reply 1"<<upload_error;
-            //call upload
-            if(upload_error == QNetworkReply::NetworkError::NoError){
-                setPlainText("Uploading Next Video");
-                nextVideoUpload();
+    case 1:
+        //playlist creation
+        upload_error = reply->error();
+        qInfo()<<"api reply 1"<<upload_error;
+        //call upload
+        if(upload_error == QNetworkReply::NetworkError::NoError){
+            setPlainText("Uploading Next Video");
+            nextVideoUpload();
+        }
+        break;
+    case 2:
+        body = reply->readAll();
+        object = QJsonDocument::fromJson(body).object();
+        qDebug()<<reply->error();
+        setPlainText("Playlist read error: " + QString::number(reply->error()));
+        if(reply->error() == QNetworkReply::NoError){
+            playListIds.clear();
+            playListTitles.clear();
+            QJsonArray items = object["items"].toArray();
+
+            for (const QJsonValue &item: std::as_const(items)) {
+                QString id = item["id"].toString();
+                QJsonObject snipet = item["snippet"].toObject();
+                QString pTitle = snipet["title"].toString();
+                qDebug()<<id<<pTitle;
+                playListIds.append(id);
+                playListTitles.append(pTitle);
             }
-            break;
-        case 2:
-            body = reply->readAll();
-            object = QJsonDocument::fromJson(body).object();
-            qDebug()<<reply->error();
-            setPlainText("Playlist read error: " + QString::number(reply->error()));
-            if(reply->error() == QNetworkReply::NoError){
-                playListIds.clear();
-                playListTitles.clear();
-                QJsonArray items = object["items"].toArray();
-                foreach (QJsonValue item, items) {
-                    QString id = item["id"].toString();
-                    QJsonObject snipet = item["snippet"].toObject();
-                    QString pTitle = snipet["title"].toString();
-                    qDebug()<<id<<pTitle;
-                    playListIds.append(id);
-                    playListTitles.append(pTitle);
-                }
-                setPlainText("Received playlists: "+QString::number(playListTitles.size()));
-                ui->availablePlaylists->addItems(playListTitles);
-            }
-            break;
-        case 3:
-            //playlist item set
-            body = reply->readAll();
-            object = QJsonDocument::fromJson(body).object();
-            qDebug()<<reply->error();
-            break;
-        case 4:
-            //thumbnail set
-            body = reply->readAll();
-            object = QJsonDocument::fromJson(body).object();
-            qDebug()<<reply->error();
-            break;
+            setPlainText("Received playlists: "+QString::number(playListTitles.size()));
+            ui->availablePlaylists->addItems(playListTitles);
+        }
+        break;
+    case 3:
+        //playlist item set
+        body = reply->readAll();
+        object = QJsonDocument::fromJson(body).object();
+        qDebug()<<reply->error();
+        break;
+    case 4:
+        //thumbnail set
+        body = reply->readAll();
+        object = QJsonDocument::fromJson(body).object();
+        qDebug()<<reply->error();
+        break;
     }
 }
 
@@ -108,37 +99,37 @@ void MainWindow::authenticReply(){
     authenticated = true;
     ui->auther->setText("Granted");
     setPlainText("Authentication Success!");
-    youtube.getPlaylists();
+    youtube->getPlaylists();
 }
 
 
 void MainWindow::uploadingStatus(int state){
     switch(state){
-        case 1:
-            ui->statusbar->showMessage("Failed to upload");
-            break;
-        case 2:
-            ui->statusbar->showMessage("Video upload error");
-            break;
-        case 3:
-            ui->statusbar->showMessage("Video upload succeeded!!!");
-            break;
-        case 4:
-            ui->statusbar->showMessage("Failed adding to playlist");
-            break;
-        case 5:
-            ui->statusbar->showMessage("Succeeded adding to playlist!!!");
-            break;
-        case 6:
-            ui->statusbar->showMessage("Failed to set thumbnail");
-            break;
-        case 7:
-            ui->statusbar->showMessage("Successfully set thumbnail!!!");
-            //go to next upload
-            nextVideoUpload();
-            break;
-        case 8:
-            break;
+    case 1:
+        ui->statusbar->showMessage("Failed to upload");
+        break;
+    case 2:
+        ui->statusbar->showMessage("Video upload error");
+        break;
+    case 3:
+        ui->statusbar->showMessage("Video upload succeeded!!!");
+        break;
+    case 4:
+        ui->statusbar->showMessage("Failed adding to playlist");
+        break;
+    case 5:
+        ui->statusbar->showMessage("Succeeded adding to playlist!!!");
+        break;
+    case 6:
+        ui->statusbar->showMessage("Failed to set thumbnail");
+        break;
+    case 7:
+        ui->statusbar->showMessage("Successfully set thumbnail!!!");
+        //go to next upload
+        nextVideoUpload();
+        break;
+    case 8:
+        break;
     }
 }
 
@@ -147,15 +138,19 @@ void MainWindow::uploadingStatus(int state){
  */
 void MainWindow::oauthSignIn() {
     if(ui->auther->text() == "Authenticate"){
-        YouTube::ClientID   client = youtube.ParseClientID(":/clientInfo.json");
+        //create object and init
+        youtube = std::make_unique<YouTube>();
+
+        initYoutubeConnection();
+        YouTube::ClientID client = youtube->ParseClientID(":/clientInfo.json");
         if(client.client_id.isEmpty()){
             setPlainText("Failed to parse the client details...");
             return;
         }
 
-        youtube.m_api_file = ":/apikey";
+        youtube->m_api_file = ":/apikey";
         setPlainText("initializing authentication");
-        QOAuth2AuthorizationCodeFlow* auth = youtube.InitOAuth(client,access_token);
+        QOAuth2AuthorizationCodeFlow* auth = youtube->InitOAuth(client,access_token);
         auth->grant();
     }else{
         msgBox.setText("Disconnected!");
@@ -163,6 +158,8 @@ void MainWindow::oauthSignIn() {
         setPlainText("Disconnected...");
 
         ui->auther->setText("Authenticate");
+        youtube.reset();
+        youtube = nullptr;
     }
     qInfo()<<access_token;
 }
@@ -204,19 +201,19 @@ void MainWindow::on_loadFiles_released()
         item1 = new QStandardItem(item);
 
         if((item.split(".")[1]).contains("mp4"))
-           item2 = new QStandardItem((item.split(".")[0]));
+            item2 = new QStandardItem((item.split(".")[0]));
         else
-          item2 = new QStandardItem((item.split(".")[1]));
+            item2 = new QStandardItem((item.split(".")[1]));
 
 
         //set tags
         QString tags="";
         QStringList tmp = ((item.split(".")[1]).split("with")[0]).split("~");
         if(tmp.size()<=1)
-          tmp = ((item.split(".")[1]).split("with")[0]).split("-");
+            tmp = ((item.split(".")[1]).split("with")[0]).split("-");
 
         if(tmp.size()<=1)
-          tmp = ((item.split(".")[0]).split("with")[0]).split("-");
+            tmp = ((item.split(".")[0]).split("with")[0]).split("-");
 
 
         if(tmp.size()>1){
@@ -275,7 +272,7 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 
 void MainWindow::on_uploadFiles_released()
 {
-    if(!authenticated){
+    if(!authenticated || youtube == nullptr){
         setPlainText("Not Authenticated");
         msgBox.setText("Authyenticate first!");
         msgBox.exec();
@@ -329,7 +326,7 @@ void MainWindow::on_uploadFiles_released()
     //qDebug()<<fileList<<titles<<tags<<description;
     if(createNewPlaylist){
         //create playlist
-        youtube.createPlaylist(ui->playlistName->text().trimmed());
+        youtube->createPlaylist(ui->playlistName->text().trimmed());
         ui->statusbar->showMessage("creating playlist",100000);
         setPlainText("Playlist is creating...");
     }
@@ -369,7 +366,7 @@ void MainWindow::nextVideoUpload(){
     nextItem.append(tags.at(uploadIndex));
     nextItem.append(description.at(uploadIndex));
     nextItem.append(isoDateTime);
-    youtube.VideoUploadRequest(nextItem);
+    youtube->VideoUploadRequest(nextItem);
     ++uploadIndex;
     ui->uploadCount->setText(QString::number(uploadIndex));
 }
@@ -381,17 +378,39 @@ void MainWindow::setPlainText(const QString &msg){
 
 void MainWindow::on_availablePlaylists_currentIndexChanged(int index)
 {
-    if(!ui->availablePlaylists->itemText(index).isEmpty()){
-        ui->playlistName->setText(ui->availablePlaylists->itemText(index));
-        youtube.setPlaylistID(playListIds.at(index));
+    if(youtube){
+        if(!ui->availablePlaylists->itemText(index).isEmpty()){
+            ui->playlistName->setText(ui->availablePlaylists->itemText(index));
+            youtube->setPlaylistID(playListIds.at(index));
+        }
+    }else{
+         setPlainText("Authenticate before changing the playlist");
     }
 }
 
 
 void MainWindow::on_thumbnail_released()
-{
-    thumbnail = QFileDialog::getOpenFileName();
-    youtube.setThumnailLocation(thumbnail);
-    setPlainText("Selected Thumbnail: "+ thumbnail);
+{    
+    if(youtube){
+        thumbnail = QFileDialog::getOpenFileName();
+        youtube->setThumnailLocation(thumbnail);
+        setPlainText("Selected Thumbnail: "+ thumbnail);
+    }else{
+        setPlainText("Authenticate FIRST...");
+    }
 }
 
+
+void MainWindow::initYoutubeConnection(){
+
+    connect(youtube.get(), &YouTube::networkReply,this, &MainWindow::apiReply);
+    connect(youtube.get(), &YouTube::authenticatioReply,this, &MainWindow::authenticReply);
+    connect(youtube.get(), &YouTube::uploadStatus,this, &MainWindow::uploadingStatus);
+    connect(youtube.get(), &YouTube::uploadProgress,this, [&](uint8_t progress){
+        ui->progressBar->setValue(progress);
+    });
+    connect(youtube.get(), &YouTube::showStatusText,this, [&](const QString &msg){
+        setPlainText(msg);
+    });
+
+}
