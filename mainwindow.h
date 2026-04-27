@@ -66,5 +66,6 @@ private:
 
     QString m_access_token;
     void initYoutubeConnection();
+    void checkBattery();
 };
 #endif // MAINWINDOW_H

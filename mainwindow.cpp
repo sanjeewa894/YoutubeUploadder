@@ -11,6 +11,12 @@
 #include <QTableView>
 #include <QDateTime>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#else
+#include <QProcess>
+#endif
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -41,6 +47,61 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+
+void MainWindow::checkBattery() {
+    int percentage = 0;
+    bool isCharging = false;
+
+    qInfo()<<__FUNCTION__<<"Running Battery check";
+
+#if defined(Q_OS_WIN)
+    //get battery percentage and charging status
+    SYSTEM_POWER_STATUS pwrStatus;
+    if (GetSystemPowerStatus(&pwrStatus)) {
+        percentage = pwrStatus.BatteryLifePercent; // 0-100, or 255 if unknown
+        isCharging = pwrStatus.ACLineStatus == 1;
+        // status.ACLineStatus: 0=Offline, 1=Online, 255=Unknown
+
+        //set sleep prevent if charging is active or battery is above 40
+        if(isCharging || (percentage > 40 && percentage != 255)){
+            // ES_CONTINUOUS ensures the state persists until cleared
+            // ES_SYSTEM_REQUIRED prevents the system from entering sleep
+            // ES_DISPLAY_REQUIRED prevents the monitor from turning off
+            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+        }
+    }
+
+#elif defined(Q_OS_LINUX)
+
+
+    //Path might be BAT1 on some systems
+    QFile capFile("/sys/class/power_supply/BAT0/capacity");
+    if (capFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        percentage = QTextStream(&capFile).readAll().trimmed().toInt();
+    }
+
+    QFile statFile("/sys/class/power_supply/AC/online");
+    if (statFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QString status = QTextStream(&statFile).readAll().trimmed();
+        isCharging = !status.contains("Discharging");
+    }else{
+        QFile statFile2("/sys/class/power_supply/BAT0/status");
+        if (statFile2.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QString status = QTextStream(&statFile2).readAll().trimmed();
+            isCharging = (status=="1");
+        }
+    }
+
+    //set sleep prevent if charging is active or battery is above 40
+    if(isCharging || (percentage > 40 && percentage != 255)){
+        QProcess::startDetached("systemd-inhibit", {"--why=Long running task", "./SleepPrevent"});
+    }
+
+#endif
+}
+
+
+
 void MainWindow::apiReply(int pos, QNetworkReply *reply){
     QNetworkReply::NetworkError upload_error;
     QByteArray body;
@@ -65,6 +126,7 @@ void MainWindow::apiReply(int pos, QNetworkReply *reply){
         if(reply->error() == QNetworkReply::NoError){
             playListIds.clear();
             playListTitles.clear();
+            ui->availablePlaylists->clear();
             QJsonArray items = object["items"].toArray();
 
             for (const QJsonValue &item: std::as_const(items)) {
@@ -321,6 +383,7 @@ void MainWindow::on_uploadFiles_released()
         return;
     }
 
+    checkBattery();
 
     bool createNewPlaylist = ui->checkBox->isChecked();
     //qDebug()<<fileList<<titles<<tags<<description;
@@ -333,6 +396,7 @@ void MainWindow::on_uploadFiles_released()
     else{
         //call update
         setPlainText("Uploading next in the line...");
+        checkBattery();
         nextVideoUpload();
     }
 }
@@ -384,7 +448,7 @@ void MainWindow::on_availablePlaylists_currentIndexChanged(int index)
             youtube->setPlaylistID(playListIds.at(index));
         }
     }else{
-         setPlainText("Authenticate before changing the playlist");
+        setPlainText("Authenticate before changing the playlist");
     }
 }
 

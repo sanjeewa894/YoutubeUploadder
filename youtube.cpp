@@ -11,6 +11,9 @@
 #include <QTimer>
 
 #include <QDebug>
+#include <QVariant>
+#include <QMultiMap>
+#include <QtNetworkAuth/QAbstractOAuth>
 
 //static int s_unused_val = qmlRegisterType<YouTube>("sonotube", 1, 0, "YouTube");
 
@@ -56,6 +59,7 @@ YouTube::YouTube(QObject* parent) : QObject(parent) {
 YouTube::~YouTube() {
 }
 
+
 QOAuth2AuthorizationCodeFlow* YouTube::InitOAuth(ClientID client, /*out,async*/QString & access_token) {
     // ensure that OpenSSL DLLs are found
     // download from https://slproweb.com/products/Win32OpenSSL.html if missing
@@ -69,6 +73,17 @@ QOAuth2AuthorizationCodeFlow* YouTube::InitOAuth(ClientID client, /*out,async*/Q
     auth->setClientIdentifier(client.client_id);
     auth->setTokenUrl(client.token_uri);
     auth->setClientIdentifierSharedKey(client.client_secret);
+
+    auth->setAutoRefresh(true);
+    auth->setRefreshLeadTime(std::chrono::seconds(60000)); // Refresh 1 minute before expiry
+
+    auth->setModifyParametersFunction([](QAbstractOAuth::Stage stage, QMultiMap<QString, QVariant> *params) {
+         if (stage == QAbstractOAuth::Stage::RequestingAuthorization) {
+             params->insert("access_type", "offline");
+             params->insert("prompt", "consent"); // Ensures you get a new refresh token
+         }
+    });
+
 
     // setup local web server to receive access_token
     auto* replyHandler = new QOAuthHttpServerReplyHandler(8080, auth);
