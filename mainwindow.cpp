@@ -68,7 +68,11 @@ void MainWindow::checkBattery() {
             // ES_SYSTEM_REQUIRED prevents the system from entering sleep
             // ES_DISPLAY_REQUIRED prevents the monitor from turning off
             SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+        }else{
+            SetThreadExecutionState(ES_CONTINUOUS);
         }
+    }else{
+        SetThreadExecutionState(ES_CONTINUOUS);
     }
 
 #elif defined(Q_OS_LINUX)
@@ -116,7 +120,8 @@ void MainWindow::apiReply(int pos, QNetworkReply *reply){
         if(upload_error == QNetworkReply::NetworkError::NoError){
             setPlainText("Uploading Next Video");
             nextVideoUpload();
-        }
+        }else
+            SetThreadExecutionState(ES_CONTINUOUS);
         break;
     case 2:
         body = reply->readAll();
@@ -184,6 +189,7 @@ void MainWindow::uploadingStatus(int state){
         break;
     case 6:
         ui->statusbar->showMessage("Failed to set thumbnail");
+        SetThreadExecutionState(ES_CONTINUOUS);//reset to normal
         break;
     case 7:
         ui->statusbar->showMessage("Successfully set thumbnail!!!");
@@ -408,6 +414,7 @@ void MainWindow::nextVideoUpload(){
         setPlainText("No files to upload");
         msgBox.setText("No file to upload!");
         msgBox.exec();
+        SetThreadExecutionState(ES_CONTINUOUS);
         return;
     }
     ui->statusbar->showMessage("Uploading video file "+ fileList.at(uploadIndex));
